@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, interactive-widget=overlays-content">
+    <title>ASCEND RIFT</title>
+    <style>
+      /* The game fills the window — the page is also embedded full-size on the website's Play page. */
+      /* overscroll-behavior: a two-finger swipe on a trackpad would otherwise navigate the browser back or forward. */
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #0d0b12; overscroll-behavior: none; }
+      #unity-canvas { position: fixed; inset: 0; margin: auto; width: 100%; height: 100%; display: block; background: #0d0b12; outline: none; }
+      #loading {
+        position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 18px; color: #ece6d9; font: 14px/1.4 system-ui, sans-serif; background: radial-gradient(ellipse at top, rgba(217,174,85,0.16), transparent 60%), #0d0b12;
+        transition: opacity 0.4s;
+      }
+      #loading h1 { margin: 0; font: 700 44px/1 Georgia, serif; letter-spacing: 0.12em; color: #d9ae55; }
+      #bar { width: min(320px, 70vw); height: 6px; border-radius: 3px; background: #211c2c; overflow: hidden; }
+      #fill { width: 0; height: 100%; background: #d9ae55; transition: width 0.2s; }
+      #status { color: #a49cb0; }
+      #mobile { display: none; max-width: 420px; padding: 0 20px; text-align: center; color: #ece6d9; }
+      #mobile p { color: #a49cb0; }
+      #mobile button { margin-top: 12px; padding: 12px 28px; font: inherit; font-weight: 600; color: #1a1420; background: #d9ae55; border: 0; border-radius: 8px; }
+      #software {
+        display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 10; padding: 10px 44px 10px 16px; text-align: center;
+        font: 13px/1.4 system-ui, sans-serif; color: #1a1408; background: #d9ae55;
+      }
+      #software button { position: absolute; right: 10px; top: 6px; border: 0; background: none; font-size: 18px; cursor: pointer; color: inherit; }
+      #error { display: none; max-width: 480px; padding: 0 16px; text-align: center; color: #e07a74; }
+      /* Phones: a small tab at the top edge that closes the game (a double tap, then a confirm). Kept small and faint, so it
+         never hides the HUD. */
+      #screen-tab {
+        display: none; position: fixed; top: 0; left: 50%; transform: translateX(-50%); z-index: 20;
+        border: 1px solid rgba(217,174,85,0.35); border-top: 0; border-radius: 0 0 10px 10px;
+        background: rgba(13,11,18,0.55); opacity: 0.75; overflow: hidden;
+      }
+      #screen-tab button {
+        display: flex; align-items: center; gap: 6px; padding: 4px 12px 5px; border: 0; background: none; color: #ece6d9;
+        font: 600 11px/1 system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase;
+        -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+      }
+      #screen-tab button.armed { color: #1a1408; background: #d9ae55; }
+      #screen-tab:active { opacity: 1; }
+      #screen-tab svg { width: 14px; height: 14px; }
+      /* Phones held upright: the game waits behind this until the phone is turned. Under the close tab. */
+      #rotate {
+        display: none; position: fixed; inset: 0; z-index: 15; flex-direction: column; align-items: center; justify-content: center;
+        gap: 10px; padding: 0 24px; text-align: center; color: #a49cb0; font: 15px/1.4 system-ui, sans-serif; background: #0d0b12;
+      }
+      #rotate svg { width: 64px; height: 64px; color: #d9ae55; }
+      #rotate h2 { margin: 6px 0 0; font: 700 24px/1.2 Georgia, serif; letter-spacing: 0.06em; color: #ece6d9; }
+      #rotate-tap { color: #d9ae55; }
+      /* Close the game? Asked after a double tap on the close tab. */
+      #confirm {
+        display: none; position: fixed; inset: 0; z-index: 28; align-items: center; justify-content: center; padding: 16px;
+        background: rgba(5,4,8,0.72); font: 14px/1.4 system-ui, sans-serif; touch-action: manipulation;
+      }
+      #confirm .box {
+        width: min(360px, 100%); padding: 22px 22px 18px; border: 1px solid rgba(217,174,85,0.5); border-radius: 12px;
+        background: #17131f; color: #a49cb0; text-align: center;
+      }
+      #confirm h3 { margin: 0 0 8px; font: 700 22px/1.2 Georgia, serif; letter-spacing: 0.06em; color: #d9ae55; }
+      #confirm p { margin: 0 0 18px; }
+      #confirm .row { display: flex; gap: 10px; }
+      #confirm button { flex: 1; padding: 12px 10px; font: inherit; font-weight: 600; border-radius: 8px; border: 1px solid rgba(217,174,85,0.4); background: #241e30; color: #ece6d9; }
+      #confirm #confirm-close { border-color: transparent; background: #8a2a2c; }
+      /* After Close game (opened on its own, not on the website): the game is gone, only this is left. */
+      #closed {
+        display: none; position: fixed; inset: 0; z-index: 30; flex-direction: column; align-items: center; justify-content: center;
+        gap: 16px; color: #ece6d9; font: 14px/1.4 system-ui, sans-serif; background: #0d0b12;
+      }
+      #closed h2 { margin: 0; font: 700 28px/1 Georgia, serif; letter-spacing: 0.1em; color: #d9ae55; }
+      #closed button { padding: 12px 28px; font: inherit; font-weight: 600; color: #1a1420; background: #d9ae55; border: 0; border-radius: 8px; }
+      /* Phones: the typing bar (window.paraverseTypingBar below). A real text box docked just above the device's keyboard
+         while a game field is being typed into; the game stays where it is behind it. 16px text, or iOS zooms the page. */
+      #typing-bar {
+        display: none; position: fixed; left: 0; right: 0; top: 0; z-index: 25; flex-direction: column; gap: 6px;
+        padding: 8px max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
+        background: #17131f; border-top: 1px solid rgba(217,174,85,0.5); box-shadow: 0 -6px 18px rgba(0,0,0,0.45);
+        font: 13px/1.3 system-ui, sans-serif; color: #a49cb0; touch-action: manipulation;
+      }
+      #typing-bar .label { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+      #typing-bar .row { display: flex; gap: 8px; }
+      #typing-bar input {
+        flex: 1; min-width: 0; padding: 10px 12px; font: 16px/1.2 system-ui, sans-serif; color: #ece6d9; background: #0d0b12;
+        border: 1px solid rgba(217,174,85,0.45); border-radius: 8px; outline: none;
+      }
+      #typing-bar input:focus { border-color: #d9ae55; }
+      #typing-bar button {
+        padding: 10px 18px; font: 600 15px/1 system-ui, sans-serif; color: #1a1420; background: #d9ae55; border: 0;
+        border-radius: 8px; -webkit-tap-highlight-color: transparent;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="unity-canvas" tabindex="-1"></canvas>
+    <div id="software">Your browser is drawing the game in software, so it will run slowly. Turn on <b>Use graphics acceleration when available</b> in your browser's System settings, then restart it.<button type="button" aria-label="Dismiss" onclick="this.parentNode.style.display='none'">&times;</button></div>
+    <div id="loading">
+      <h1>ASCEND RIFT</h1>
+      <div id="bar"><div id="fill"></div></div>
+      <div id="status">Loading…</div>
+      <div id="error"></div>
+      <div id="mobile"><p>Touch controls are new: a stick on the left, abilities on the right. Hold the phone sideways, and use a recent phone or tablet with Chrome or Safari.</p><button type="button" id="play-mobile">Play anyway</button></div>
+    </div>
+    <div id="rotate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M20 14a6 6 0 0 1-4 5.6M18 19.6l-2 .1.4-2"/></svg><h2>Turn your phone sideways</h2><div>The game plays in landscape.</div><div id="rotate-tap">Then tap to play fullscreen.</div></div>
+    <div id="screen-tab"><button type="button" id="close-game"></button></div>
+    <div id="confirm"><div class="box"><h3>Close the game?</h3><p>This leaves the match and fullscreen, and stops the game.</p><div class="row"><button type="button" id="confirm-stay">Keep playing</button><button type="button" id="confirm-close">Close game</button></div></div></div>
+    <div id="closed"><h2>Game closed</h2><div>Nothing is running in the background.</div><button type="button" onclick="location.reload()">Play again</button></div>
+    <script>
+      // The game server is on a free plan that sleeps after 15 quiet minutes and takes about a minute to wake. Knock on its
+      // door now, while the build is still downloading, so it is up by the time the player presses Play online. The reply
+      // (a 502 for a plain GET, or nothing while it boots) doesn't matter; the request arriving is what wakes it.
+      (function () {
+        // Two servers (ServerRegions.cs): UTC+3 and east default to Asia (Singapore), the rest to North America (Ohio).
+        // A player who picked the other one in Settings gets it knocked by the game itself as it boots.
+        try {
+          var asia = -new Date().getTimezoneOffset() >= 180;
+          var host = asia ? "paraverse-multiplayer-game-1.onrender.com" : "paraverse-multiplayer-game-p27t.onrender.com";
+          fetch("https://" + host + "/", { mode: "no-cors", cache: "no-store" }).catch(function () {});
+        } catch (e) {}
+      })();
+    </script>
+    <script>
+      // Unity's last step each frame is a fullscreen blit to the page (it converts to sRGB). It only uses vertex attribute 0, but
+      // leaves attributes 1 and 2 switched on from the previous draw. Once a scene change frees the meshes those were reading,
+      // Chrome refuses the blit ("no buffer is bound to enabled attribute") and the screen stays black. So for that one program,
+      // switch off any enabled attribute with no buffer for the draw, then put it back exactly as Unity left it.
+      (function () {
+        if (typeof WebGL2RenderingContext === "undefined") return;
+        var proto = WebGL2RenderingContext.prototype;
+        var useProgram = proto.useProgram;
+        var current = new WeakMap();
+        var blitPrograms = new WeakMap();
+
+        proto.useProgram = function (program) {
+          current.set(this, program);
+          return useProgram.call(this, program);
+        };
+
+        function isBlit(gl, program) {
+          var known = blitPrograms.get(program);
+          if (known === undefined) {
+            known = gl.getProgramParameter(program, gl.ACTIVE_ATTRIBUTES) === 1 && gl.getActiveAttrib(program, 0).name === "vertex";
+            blitPrograms.set(program, known);
+          }
+          return known;
+        }
+
+        ["drawElements", "drawArrays"].forEach(function (name) {
+          var original = proto[name];
+          proto[name] = function () {
+            var program = current.get(this);
+            if (!program || !isBlit(this, program)) return original.apply(this, arguments);
+
+            var parked = [];
+            for (var i = 1; i < 16; i++) {
+              if (this.getVertexAttrib(i, this.VERTEX_ATTRIB_ARRAY_ENABLED) && !this.getVertexAttrib(i, this.VERTEX_ATTRIB_ARRAY_BUFFER_BINDING)) {
+                this.disableVertexAttribArray(i);
+                parked.push(i);
+              }
+            }
+
+            var result = original.apply(this, arguments);
+            for (var k = 0; k < parked.length; k++) this.enableVertexAttribArray(parked[k]);
+            return result;
+          };
+        });
+      })();
+    </script>
+    <script>
+      // Phones and tablets: the touch controls are new and memory is tight, so ask first.
+      var isMobile = /Android|iPhone|iPad|iPod|Mobile|Silk|Kindle/i.test(navigator.userAgent)
+        || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent))
+        || (window.matchMedia && window.matchMedia("(pointer: coarse)").matches && !window.matchMedia("(any-pointer: fine)").matches);
+      function loadGame() {
+        var loader = document.createElement("script");
+        loader.src = "Build/a674d46b33ccfa3b469af259b4160706.loader.js";
+        // Called through a wrapper: startGame is declared in the script below, which hasn't run yet at this point.
+        loader.onload = function () { startGame(); };
+        document.body.appendChild(loader);
+      }
+
+      // Fullscreen on a phone (docs/ui.md, "Phones"). Once "Play anyway" is tapped the game owns the screen: fullscreen,
+      // sideways (locked where the browser can), and held upright it waits behind "Turn your phone sideways" (#rotate).
+      // If the back gesture leaves it, the next touch goes back in, unless the player chose Exit Fullscreen in the pause menu
+      // (paraverseSetFullscreen), which stays out until they ask again. Closing the game is the
+      // tab at the top (#close-game): a double tap asks (#confirm), and confirming leaves fullscreen and closes the game.
+      //  - On the website's Play page (embedded), the page covers itself with the game and goes fullscreen (an iPhone
+      //    can't make anything but a video fullscreen, so there it only covers the page). This page asks it to.
+      //  - Opened on its own, this page goes fullscreen itself (a browser only allows it on a touch).
+      var embedded = window.parent !== window;
+
+      // Close game, opened on its own: Unity stops (its memory and the GPU are let go), and only a dark page with
+      // Play again is left. One still loading is stopped as soon as it's ready (startGame checks gameClosed).
+      var gameClosed = false;
+      function closeGame() {
+        if (gameClosed) return;
+        gameClosed = true;
+        gameRunning = false; // nothing left to lose: no "leave this page?" prompt
+        if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(function () {});
+        mobileScreen.render();
+        document.querySelector("#closed").style.display = "flex";
+        var loading = document.querySelector("#loading");
+        if (loading) loading.remove();
+        var canvas = document.querySelector("#unity-canvas");
+        var done = function () { canvas.remove(); };
+        if (unity) unity.Quit().then(done, done);
+      }
+
+      // The game's own Exit Game (main menu, WebPage.jslib): the website takes the game out, or this page closes it.
+      window.paraverseClose = function () {
+        if (embedded) window.parent.postMessage({ type: "paraverse-close" }, "*");
+        else closeGame();
+      };
+
+      var mobileScreen = (function () {
+        var tab = document.querySelector("#screen-tab");
+        var closeButton = document.querySelector("#close-game");
+        var rotate = document.querySelector("#rotate");
+        var rotateTap = document.querySelector("#rotate-tap");
+        var confirmBox = document.querySelector("#confirm");
+        var root = document.documentElement;
+        var canFullscreen = !!(root.requestFullscreen || root.webkitRequestFullscreen);
+        var landscape = window.matchMedia("(orientation: landscape)");
+        var started = false; // "Play anyway" tapped: from here on the game owns the screen
+        var full = false;    // embedded: whether the website is in real fullscreen (told by it)
+        var cover = false;   // embedded: whether the website has the game covering the page (told by it)
+        var optedOut = false; // the player left fullscreen from the game's menu: stay out until they ask again
+
+        function fullscreenElement() { return document.fullscreenElement || document.webkitFullscreenElement || null; }
+        function isFull() { return embedded ? full : !!fullscreenElement(); }
+
+        // navigationUI "hide": Android's own navigation bar goes too, not only the browser's.
+        function enterFullscreen() {
+          var request = root.requestFullscreen ? root.requestFullscreen({ navigationUI: "hide" }) : root.webkitRequestFullscreen ? root.webkitRequestFullscreen() : null;
+          if (request && request.then) {
+            request.then(function () {
+              if (screen.orientation && screen.orientation.lock) screen.orientation.lock("landscape").catch(function () {});
+            }).catch(function () {});
+          }
+        }
+
+        function tell(message) {
+          // Nothing private in these; the website checks they came from the game.
+          message.type = "paraverse-" + message.type;
+          window.parent.postMessage(message, "*");
+        }
+
+        // Back into fullscreen (and sideways, where the browser can): the website does it when embedded.
+        function goFull() {
+          if (embedded) tell({ type: started ? "touch" : "fullscreen", on: true });
+          else if (canFullscreen && !fullscreenElement()) enterFullscreen();
+        }
+
+        var CLOSE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+        var hintUntil = 0;
+
+        function render() {
+          var live = isMobile && started && !gameClosed;
+          tab.style.display = live ? "flex" : "none";
+          var hinting = Date.now() < hintUntil;
+          closeButton.className = hinting ? "armed" : "";
+          closeButton.innerHTML = CLOSE_ICON + (hinting ? "Double-tap to close" : "Close");
+          closeButton.setAttribute("aria-label", "Close the game (double-tap)");
+          // Held upright: the game is laid out sideways, so it waits behind this until the phone is turned.
+          rotate.style.display = live && !landscape.matches ? "flex" : "none";
+          rotateTap.style.display = canFullscreen && !isFull() ? "block" : "none";
+        }
+
+        // Close the game: a double tap on the tab asks (#confirm), and Close game there leaves fullscreen and closes it.
+        // A single tap only says so, so a thumb brushing the tab mid-fight never ends the match.
+        var lastTap = 0;
+        closeButton.addEventListener("click", function () {
+          var now = Date.now();
+          if (now - lastTap < 450) {
+            lastTap = 0;
+            hintUntil = 0;
+            confirmBox.style.display = "flex";
+            render();
+            return;
+          }
+
+          lastTap = now;
+          hintUntil = now + 2000;
+          render();
+          setTimeout(render, 2100);
+        });
+
+        document.querySelector("#confirm-stay").addEventListener("click", function () {
+          confirmBox.style.display = "none";
+          canvasEl.focus();
+        });
+
+        document.querySelector("#confirm-close").addEventListener("click", function () {
+          confirmBox.style.display = "none";
+          // On the website the page leaves fullscreen and takes the game out altogether (it frees everything); opened on
+          // its own, closeGame leaves fullscreen and stops the game.
+          if (embedded) tell({ type: "close" });
+          else closeGame();
+        });
+
+        // Any touch while not fullscreen (the back gesture left it, or the browser refused): the moment a browser lets a
+        // page go fullscreen, so go back in. There is no way to stay out but closing the game.
+        window.addEventListener("touchend", function (event) {
+          if (!isMobile || !started || optedOut || gameClosed || tab.contains(event.target) || confirmBox.contains(event.target)) return;
+          if (!isFull()) goFull();
+        }, { capture: true, passive: true });
+
+        if (!embedded) {
+          ["fullscreenchange", "webkitfullscreenchange"].forEach(function (type) { document.addEventListener(type, render); });
+        }
+
+        if (landscape.addEventListener) landscape.addEventListener("change", render); else landscape.addListener(render);
+
+        // The website says whether the game is filling the screen.
+        window.addEventListener("message", function (event) {
+          if (!embedded || SITE_ORIGINS.indexOf(event.origin) < 0 || !event.data || event.data.type !== "paraverse-immersive") return;
+          full = !!event.data.full;
+          cover = !!event.data.on;
+          render();
+        });
+
+        // The game's pause menu: Exit Fullscreen / Fullscreen (WebPage.jslib). Out means out — no touch drags it back —
+        // until the player asks for fullscreen again.
+        window.paraverseIsFullscreen = function () { return embedded ? (full || cover) : !!fullscreenElement(); };
+        window.paraverseSetFullscreen = function (on) {
+          optedOut = !on;
+          if (embedded) {
+            tell({ type: on ? "fullscreen" : "exit-fullscreen", on: !!on });
+          } else if (on) {
+            if (canFullscreen && !fullscreenElement()) enterFullscreen();
+          } else if (fullscreenElement()) {
+            if (document.exitFullscreen) document.exitFullscreen().catch(function () {});
+            else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+          }
+          render();
+        };
+
+        render();
+        return {
+          // The "Play anyway" tap: go fullscreen (and sideways, where the browser can) while the browser allows it.
+          start: function () {
+            goFull();
+            started = true;
+            render();
+          },
+          render: render,
+        };
+      })();
+
+      if (isMobile) {
+        document.querySelector("#bar").style.display = "none";
+        document.querySelector("#status").style.display = "none";
+        document.querySelector("#mobile").style.display = "block";
+        document.querySelector("#play-mobile").onclick = function () {
+          document.querySelector("#mobile").style.display = "none";
+          document.querySelector("#bar").style.display = "";
+          document.querySelector("#status").style.display = "";
+          mobileScreen.start();
+          loadGame();
+        };
+      } else {
+        loadGame();
+      }
+    </script>
+    <script>
+      // One sign-in shared with the website (docs/api-contract.md, "Signing in once"; WebSessionBridge.cs). Only the
+      // website's own origins (below) are listened to or sent anything, and nothing that crosses is a password or a
+      // session: only one-time tokens and codes, each turned into a separate session by the side that receives it.
+      //  - On the Play page: the page posts { type: "paraverse-session", tokenHash, userId } when it is signed in, or
+      //    { type: "paraverse-site-signed-out" }; then a sign-in in the game posts back { type: "paraverse-site-handoff", code }.
+      //  - Opened on its own: "Sign in with website" goes to the website's /auth/game-link with a random state, and comes
+      //    back as #pv_link=<code>&pv_state=<state>; the code is taken only if the state is the one saved here.
+      //    "Open Website" opens the website's /auth/from-game#code=<code> in a new tab.
+      //  - On the website's own subdomain (https://play.ascendrift.com, the same site as ascendrift.com): the game, not
+      //    signed in, asks the website itself with the website's cookies (askSite: POST <site>/api/auth/game-token,
+      //    credentials included) and gets the same one-time token the Play page would hand over; "Sign in with website"
+      //    tries that first and only goes to the website when it is signed out there too.
+      //  - Game → website (0.50.0): a sign-in in the game's own form redeems a one-time code with the website's cookies
+      //    (POST <site>/api/auth/redeem) and the game's Sign Out signs the website out (POST <site>/api/auth/sign-out); on
+      //    the Play page the page around the game does both ("paraverse-site-handoff", "paraverse-site-sign-out").
+      //  - Continue with Google / Discord and Choose your username open the website in a NEW TAB (openSitePage), never
+      //    this page or frame; the game picks the website's sign-in up when the player comes back.
+      // The site is ascendrift.com (www too); the old Vercel address and localhost (npm run dev) still count.
+      var SITE_ORIGINS = ["https://ascendrift.com", "https://www.ascendrift.com", "https://paraverse-web.vercel.app", "http://localhost:3000"];
+      var SITE_URL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? "http://localhost:3000" : SITE_ORIGINS[0];
+      // Same site as the website: https on a subdomain of ascendrift.com (http counts as another site for its cookies).
+      var sameSite = location.protocol === "https:" && /(^|\.)ascendrift\.com$/i.test(location.hostname);
+      var unity = null, pendingCalls = [];
+      function deliverToken() {
+        while (unity && pendingCalls.length) {
+          var call = pendingCalls[0];
+          try {
+            unity.SendMessage("WebSessionBridge", call[0], call[1]);
+            pendingCalls.shift();
+          } catch (e) {
+            setTimeout(deliverToken, 1000); // the bridge object isn't created yet
+            return;
+          }
+        }
+      }
+      function callBridge(method, value) {
+        pendingCalls.push([method, value]);
+        deliverToken();
+      }
+
+      // The website around this frame, if it is one of ours.
+      var embedded = window.parent !== window;
+      var siteOrigin = null;
+      (function () {
+        if (!embedded) return;
+        var ancestor = location.ancestorOrigins && location.ancestorOrigins.length ? location.ancestorOrigins[0] : null;
+        var referrer = null;
+        try { referrer = document.referrer ? new URL(document.referrer).origin : null; } catch (e) { /* none */ }
+        var candidate = ancestor || referrer;
+        if (candidate && SITE_ORIGINS.indexOf(candidate) >= 0) siteOrigin = candidate;
+      })();
+
+      window.addEventListener("message", function (event) {
+        if (SITE_ORIGINS.indexOf(event.origin) < 0 || event.source !== window.parent || !event.data) return;
+        siteOrigin = event.origin;
+        var type = event.data.type;
+        if (type === "paraverse-session" && typeof event.data.tokenHash === "string" && event.data.tokenHash.length < 200) {
+          var userId = typeof event.data.userId === "string" && /^[0-9a-f-]{36}$/i.test(event.data.userId) ? event.data.userId : "";
+          callBridge("OnSessionToken", event.data.tokenHash + (userId ? " " + userId : ""));
+        } else if (type === "paraverse-site-signed-out") {
+          callBridge("OnSiteSignedOut", "");
+        }
+      });
+
+      // Back from the website's "Sign in with website": the code is taken only with the state saved before leaving.
+      (function () {
+        var hash = location.hash.slice(1);
+        if (hash.indexOf("pv_link=") < 0) return;
+        var params = new URLSearchParams(hash);
+        var code = params.get("pv_link") || "", state = params.get("pv_state") || "";
+        var expected = null;
+        try { expected = sessionStorage.getItem("pv_link_state"); sessionStorage.removeItem("pv_link_state"); } catch (e) { /* none */ }
+        history.replaceState(null, "", location.pathname + location.search); // the code never stays in the address bar
+        if (expected && state === expected && /^[A-Za-z0-9_-]{32,64}$/.test(code)) callBridge("OnHandoffCode", code);
+      })();
+
+      // Same site only: the website's sign-in, asked for with its cookies. A token goes to the game as the Play page's
+      // would (OnSessionToken), then onToken, if given; anything else (signed out there, offline, an older website) calls
+      // orElse, if given.
+      var asking = false;
+      function askSite(orElse, onToken) {
+        if (!sameSite || asking || typeof fetch !== "function") { if (orElse) orElse(); return; }
+        asking = true;
+        fetch(SITE_URL + "/api/auth/game-token", { method: "POST", credentials: "include", cache: "no-store" })
+          .then(function (response) { return response.ok ? response.json() : null; })
+          .then(function (data) {
+            asking = false;
+            if (data && typeof data.tokenHash === "string" && data.tokenHash.length > 0 && data.tokenHash.length < 200) {
+              pickupUntil = 0;
+              var userId = typeof data.userId === "string" && /^[0-9a-f-]{36}$/i.test(data.userId) ? data.userId : "";
+              callBridge("OnSessionToken", data.tokenHash + (userId ? " " + userId : ""));
+              if (onToken) onToken();
+            } else if (orElse) {
+              orElse();
+            }
+          })
+          .catch(function () {
+            asking = false;
+            if (orElse) orElse();
+          });
+      }
+
+      // After "Sign in with website" opened the website's sign-in in a new tab: for the next ten minutes the website is
+      // asked again whenever this tab is shown or focused, and every few seconds while it is visible, so the game signs
+      // in as soon as the player has signed in there and come back.
+      var pickupUntil = 0;
+      function pickUp() {
+        if (pickupUntil > Date.now() && document.visibilityState === "visible") askSite(null);
+      }
+      document.addEventListener("visibilitychange", pickUp);
+      window.addEventListener("focus", pickUp);
+      setInterval(pickUp, 4000);
+
+      // The website's sign-in in a new tab, never this page or frame. False when the browser blocked the tab. It ends on
+      // the website's "You're signed in. Return to the game tab" page.
+      function openSignInTab(tab) {
+        var url = siteBase() + "/sign-in?next=%2Fauth%2Fgame-done";
+        if (tab) {
+          try { tab.location.replace(url); } catch (e) { return false; }
+        } else {
+          tab = window.open(url, "_blank", "noopener");
+          // With noopener the browser hands back no window even when it opened one; only a thrown error means blocked.
+        }
+        pickupUntil = Date.now() + 10 * 60 * 1000;
+        return true;
+      }
+
+      // The website this game belongs to: the Play page around it, else ascendrift.com (localhost:3000 in development).
+      function siteBase() { return embedded && siteOrigin ? siteOrigin : SITE_URL; }
+
+      // Same site only: a cookie-carrying POST to the website's API (redeem, sign-out). Fire and forget: the game goes on
+      // whatever the answer.
+      function postToSite(path, body) {
+        if (!sameSite || embedded || typeof fetch !== "function") return;
+        fetch(SITE_URL + path, {
+          method: "POST",
+          credentials: "include",
+          cache: "no-store",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }).catch(function () { /* offline: the website keeps its own sign-in */ });
+      }
+
+      var websiteTab = null;
+      window.paraverseAuth = {
+        embedded: function () { return embedded && !!siteOrigin; },
+        sameSite: function () { return sameSite && !embedded; },
+        // The game, signed out on the website's subdomain: pick up the website's sign-in if there is one (silently).
+        askSite: function () { if (!embedded) askSite(null); },
+        // Coming back into focus while a "Sign in with website" is waiting: ask again, never navigating anything.
+        askAgain: function () {
+          if (embedded && siteOrigin) window.parent.postMessage({ type: "paraverse-session-request" }, siteOrigin);
+          else if (!embedded) askSite(null);
+        },
+        signInWithWebsite: function () {
+          // On the website's Play page: the page signs the game in, or (signed out there too) goes to the site's sign-in
+          // at the top level and comes back to the Play page. Never this frame: the site would open inside itself.
+          if (embedded && siteOrigin) {
+            window.parent.postMessage({ type: "paraverse-sign-in" }, siteOrigin);
+            return;
+          }
+          // In someone else's frame: the website's sign-in in a new tab.
+          if (embedded) {
+            try { window.open(SITE_URL + "/sign-in", "_blank", "noopener"); } catch (e) { /* blocked */ }
+            return;
+          }
+          // On the website's subdomain (play.ascendrift.com): its sign-in is one request away, asked for silently. Signed
+          // in there, the game signs in and nothing opens; signed out, the game says so and offers Open ascendrift.com
+          // (openSignIn, a new tab). Never a tab or a navigation on this press.
+          if (sameSite) {
+            pickupUntil = Date.now() + 10 * 60 * 1000;
+            askSite(function () { callBridge("OnSiteSignedOut", ""); });
+            return;
+          }
+          // Anywhere else (GitHub Pages, localhost): to the website and back with a code, at the top level.
+          goSignIn();
+        },
+        // The game's "Open ascendrift.com" after the website said it is signed out: its sign-in in a new tab, and the
+        // game picks the session up when the player comes back. False when the browser blocked the tab.
+        openSignIn: function () {
+          try { return openSignInTab(null); } catch (e) { return false; }
+        },
+        // Any website page in a new tab (the game's Continue with Google / Discord: /auth/start?provider=…&from=game; Choose
+        // your username: /welcome), then the game picks up the website's sign-in when the player comes back (same site:
+        // asked here every few seconds while visible, for ten minutes; the Play page: the game asks it on focus).
+        openSitePage: function (path) {
+          if (typeof path !== "string" || path.charAt(0) !== "/" || path.charAt(1) === "/") return false;
+          try { window.open(siteBase() + path, "_blank", "noopener"); } catch (e) { return false; }
+          pickupUntil = Date.now() + 10 * 60 * 1000;
+          return true;
+        },
+        // The game signed in: no more asking the website (it would only hand back the same account, or worse, the
+        // website's other account while it is being signed in to this one).
+        pickupDone: function () { pickupUntil = 0; },
+        // A sign-in in the game signs the website in too: the Play page redeems the code itself; on the website's
+        // subdomain this page redeems it with the website's cookies (replace: the game's newest sign-in wins).
+        sendSiteHandoff: function (code) {
+          if (!code) return;
+          if (embedded && siteOrigin) window.parent.postMessage({ type: "paraverse-site-handoff", code: code }, siteOrigin);
+          else if (!embedded) postToSite("/api/auth/redeem", { code: code, replace: true });
+        },
+        // The game's Sign Out signs the website out too, when it is signed in to the same account.
+        signSiteOut: function (userId) {
+          var id = typeof userId === "string" ? userId.slice(0, 64) : "";
+          if (embedded && siteOrigin) window.parent.postMessage({ type: "paraverse-site-sign-out", userId: id }, siteOrigin);
+          else if (!embedded) postToSite("/api/auth/sign-out", { userId: id });
+        },
+        // The tab is opened during the click (a browser blocks it later), and pointed at the website once the code exists.
+        openWebsiteBegin: function () {
+          websiteTab = window.open("about:blank", "_blank");
+          if (websiteTab) { try { websiteTab.opener = null; } catch (e) { /* fine */ } }
+          return !!websiteTab;
+        },
+        openWebsiteFinish: function (code) {
+          if (!websiteTab) return;
+          websiteTab.location.replace(SITE_URL + (code ? "/auth/from-game#code=" + encodeURIComponent(code) : "/account"));
+          websiteTab = null;
+        },
+      };
+
+      // "Sign in with website" from a game opened on its own at the top level: to the website and back with a code.
+      function goSignIn() {
+        var bytes = new Uint8Array(24);
+        crypto.getRandomValues(bytes);
+        var state = btoa(String.fromCharCode.apply(null, bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+        try { sessionStorage.setItem("pv_link_state", state); } catch (e) { /* the code will be refused on return */ }
+        gameRunning = false; // leaving on purpose: no "leave this page?" prompt
+        location.assign(SITE_URL + "/auth/game-link?state=" + state);
+      }
+
+      // Invite links (InviteLinks.cs): <site>/play#room=<id>&code=<CODE>, or this page with the same fragment. The page
+      // takes the invite on load, strips it from the address and hands it to the game, whose main menu joins with it.
+      (function () {
+        var match = /^#room=(\d{1,9})&code=([A-Za-z2-9]{6})$/.exec(location.hash);
+        if (!match) return;
+        history.replaceState(null, "", location.pathname + location.search); // a reload doesn't re-join a stale room
+        callBridge("OnInvite", match[1] + " " + match[2].toUpperCase());
+      })();
+
+      // Copying an invite link. Safari only copies inside a real DOM gesture, and Unity handles a UI click a frame after
+      // the browser's event, so the game arms the copy on pointer-down and it runs on that click's pointer-up or key-up
+      // (capture phase, once, for 3 s). The result goes back to WebSessionBridge.OnInviteCopied as "ok" or "fail".
+      var armedCopy = null;
+      function copyText(text) {
+        function answer(ok) { callBridge("OnInviteCopied", ok ? "ok" : "fail"); }
+        function fallback() {
+          var ok = false, area = document.createElement("textarea");
+          area.value = text;
+          area.setAttribute("readonly", "");
+          area.style.position = "fixed";
+          area.style.top = "-1000px";
+          area.style.opacity = "0";
+          document.body.appendChild(area);
+          try {
+            area.select();
+            area.setSelectionRange(0, text.length);
+            ok = document.execCommand("copy");
+          } catch (e) { ok = false; }
+          document.body.removeChild(area);
+          var canvas = document.getElementById("unity-canvas");
+          if (canvas) { try { canvas.focus(); } catch (e) { /* fine */ } }
+          answer(ok);
+        }
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === "function" && window.isSecureContext) {
+          navigator.clipboard.writeText(text).then(function () { answer(true); }, fallback);
+        } else {
+          fallback();
+        }
+      }
+      function disarmCopy() {
+        if (!armedCopy) return;
+        document.removeEventListener("pointerup", armedCopy.run, true);
+        document.removeEventListener("keyup", armedCopy.run, true);
+        clearTimeout(armedCopy.timer);
+        armedCopy = null;
+      }
+      window.paraverseInvite = {
+        siteUrl: function () { return siteOrigin || SITE_URL; },
+        arm: function (text) {
+          disarmCopy();
+          var armed = { text: String(text || "") };
+          armed.run = function () {
+            if (armedCopy !== armed) return;
+            disarmCopy();
+            copyText(armed.text);
+          };
+          armed.timer = setTimeout(function () {
+            if (armedCopy !== armed) return;
+            disarmCopy();
+            callBridge("OnInviteCopied", "fail"); // no gesture came: the game shows the link to copy by hand
+          }, 3000);
+          armedCopy = armed;
+          document.addEventListener("pointerup", armed.run, true);
+          document.addEventListener("keyup", armed.run, true);
+        },
+        copyNow: function (text) {
+          disarmCopy();
+          copyText(String(text || ""));
+        },
+      };
+
+      // Tell the page the game is listening, whichever of the two loads first.
+      if (embedded) {
+        window.parent.postMessage({ type: "paraverse-ready" }, "*");
+      }
+
+      // Backing-store size: the screen's own pixels, so text and the interface are sharp. The 3D view's cost is held to
+      // about a 1080p budget inside the game instead (WebPerformance sets the render pipeline's render scale), and only
+      // the interface is drawn at full density, which is cheap. A canvas capped at ~1080p and stretched by the browser
+      // made every word soft on a 1440p, 4K or 150%-scaled screen. Still capped at 2x density and about 4K's worth of
+      // pixels, so a 5K or 8K screen doesn't ask for more than a browser tab can fill. Called again on every resize.
+      var PIXEL_BUDGET = 8.3e6;
+
+      // Some browsers have hardware acceleration switched off (or blocked by the driver) and draw WebGL on the CPU, which no
+      // setting in the game can make fast. Say so, rather than leave the player to think the game is just slow.
+      // Checked on the game's OWN WebGL context, after it exists. A separate throwaway context (and especially losing it) must
+      // never be made: some drivers carry the "exit on context lost" workaround, where losing any context kills the browser's
+      // GPU process and takes the game's context with it.
+      function warnIfSoftwareRendering(canvas) {
+        try {
+          var gl = canvas.getContext("webgl2") || canvas.getContext("webgl"); // the existing context, not a new one
+          var info = gl && gl.getExtension("WEBGL_debug_renderer_info");
+          var renderer = info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : "";
+          if (/swiftshader|llvmpipe|software|basic render/i.test(renderer)) {
+            document.querySelector("#software").style.display = "block";
+          }
+        } catch (e) { /* no banner */ }
+      }
+
+      // The mouse's back and forward buttons (and Alt+Left/Right) navigate the browser away from the game, which is easy to
+      // do by accident mid-fight. Browsers act on the button's release, so cancelling it keeps the player here.
+      ["mousedown", "mouseup", "pointerup", "auxclick"].forEach(function (type) {
+        window.addEventListener(type, function (event) {
+          if (event.button === 3 || event.button === 4) { event.preventDefault(); event.stopPropagation(); }
+        }, true);
+      });
+      window.addEventListener("keydown", function (event) {
+        if (event.altKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) event.preventDefault();
+
+        // Browser shortcuts a fight's keys can hit by accident (Ctrl+R reloads, Ctrl+S saves the page, Ctrl+D bookmarks,
+        // Ctrl+F/P/E open bars and dialogs, F5 reloads) do nothing while the game has the keyboard. Copy, paste, cut,
+        // select-all and undo still work for text boxes. The browser keeps Ctrl+W, Ctrl+T and Ctrl+N for itself whatever
+        // a page does; leaving the page then asks first (beforeunload below), and the game never asks for Ctrl.
+        var ctrl = event.ctrlKey || event.metaKey;
+        var editing = /^(c|v|x|a|z|y)$/i.test(event.key);
+        if ((ctrl && !editing && event.key !== "Control" && event.key !== "Meta") || event.key === "F5") event.preventDefault();
+      }, true);
+
+      // Once the game is running, leaving the page (back, closing the tab, a link) asks first. Not while loading.
+      var gameRunning = false;
+      window.addEventListener("beforeunload", function (event) {
+        if (!gameRunning) return;
+        event.preventDefault();
+        event.returnValue = "";
+      });
+
+      // The picture is never wider than about 21.5:9: a 34-inch ultrawide fills, anything wider is centred with dark bars. Wider
+      // costs the GPU the extra pixels for a stretched, soft image, and the view is hard to take in at that width anyway.
+      var MAX_ASPECT = 21.5 / 9; // a 34-inch 3440x1440 ultrawide fills the screen; wider (32:9) gets bars
+      var canvasEl = document.querySelector("#unity-canvas");
+      function layoutCanvas() {
+        var w = window.innerWidth, h = window.innerHeight;
+        var shown = Math.min(w, Math.round(h * MAX_ASPECT));
+        canvasEl.style.width = shown + "px";
+        canvasEl.style.height = h + "px";
+      }
+      layoutCanvas();
+
+      function fitPixelRatio() {
+        var w = Math.max(320, Math.min(window.innerWidth, window.innerHeight * MAX_ASPECT)), h = Math.max(240, window.innerHeight);
+        return Math.max(0.5, Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(PIXEL_BUDGET / (w * h))));
+      }
+
+      // Follow the window from the very first frame, not only once the game has loaded: fullscreen pressed while it was
+      // still loading left the canvas at the old frame's size, and the game started (and laid out its interface) at that
+      // size. Fullscreen is followed directly as well as through resize, and again a frame later, since some browsers
+      // report the old size during the change.
+      var typingOpen = false;
+      function fitToWindow() {
+        if (typingOpen) return;
+        layoutCanvas();
+        if (unity) {
+          try { unity.Module.devicePixelRatio = fitPixelRatio(); } catch (e) { /* older loader */ }
+        }
+      }
+      function fitSoon() {
+        fitToWindow();
+        requestAnimationFrame(fitToWindow);
+      }
+      window.addEventListener("resize", fitSoon);
+      document.addEventListener("fullscreenchange", fitSoon);
+      document.addEventListener("webkitfullscreenchange", fitSoon);
+
+      // ─── Phones: the typing bar ────────────────────────────────────────────────────────────────────────────────────
+      // Nov 2026. On a touch device a game field never opens Unity's own soft keyboard (TypingBar.cs turns it off): the
+      // game tells this page where its fields are (setFields, a few times a second while the player is on touch), a tap on
+      // one opens this bar inside the tap itself (iOS shows a keyboard only for a focus made in a gesture), and what is
+      // typed goes to the game as it is typed (OnBarText), on Done or Send (OnBarSubmit) and when the bar closes
+      // (OnBarClosed). The page is pinned meanwhile: Android overlays the keyboard (interactive-widget above), and iOS,
+      // which pans the visual viewport anyway, is scrolled back to the top. A desktop never gets here: the game publishes
+      // no fields without touch, and only a touch tap opens the bar.
+      (function () {
+        var fields = [];
+        var open = null;
+        var bar = null, label = null, input = null, done = null;
+
+        function sendToGame(method, value) {
+          if (!unity) return;
+          try { unity.SendMessage("TypingBar", method, value); } catch (e) { /* the game isn't listening yet */ }
+        }
+
+        function pin() {
+          if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+          if (document.body.scrollTop) document.body.scrollTop = 0;
+        }
+
+        // Docked just above the keyboard: the bottom of what is visible now (the visual viewport) is the keyboard's top.
+        function place() {
+          if (!bar || !open) return;
+          var vv = window.visualViewport;
+          var bottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+          bar.style.top = Math.max(0, bottom - bar.offsetHeight) + "px";
+        }
+
+        function build() {
+          if (bar) return;
+          bar = document.createElement("div");
+          bar.id = "typing-bar";
+          label = document.createElement("div");
+          label.className = "label";
+          var row = document.createElement("div");
+          row.className = "row";
+          input = document.createElement("input");
+          input.setAttribute("spellcheck", "true");
+          done = document.createElement("button");
+          done.type = "button";
+          row.appendChild(input);
+          row.appendChild(done);
+          bar.appendChild(label);
+          bar.appendChild(row);
+          document.body.appendChild(bar);
+
+          input.addEventListener("input", function () {
+            if (open) sendToGame("OnBarText", open.id + "|" + input.value);
+          });
+          input.addEventListener("keydown", function (event) {
+            if (event.key === "Enter" && !(open && open.multi && event.shiftKey)) {
+              event.preventDefault();
+              submit();
+            }
+          });
+          // The button keeps the keyboard up until it is let go, then commits.
+          done.addEventListener("pointerdown", function (event) { event.preventDefault(); });
+          done.addEventListener("click", function () { submit(); });
+          // The keyboard went down (the phone's own hide key, a tap elsewhere): what was typed stays in the field.
+          input.addEventListener("blur", function () {
+            setTimeout(function () { if (open && document.activeElement !== input) hide(true); }, 0);
+          });
+        }
+
+        function show(field) {
+          build();
+          open = field;
+          typingOpen = true;
+          var kind = field.kind || "text";
+          input.type = kind === "password" || kind === "pin" ? "password" : kind === "email" ? "email" : "text";
+          input.inputMode = kind === "number" || kind === "pin" ? "numeric" : kind === "decimal" ? "decimal" : kind === "email" ? "email" : "text";
+          input.setAttribute("enterkeyhint", field.enter === "send" ? "send" : "done");
+          input.setAttribute("autocomplete", kind === "password" ? "current-password" : kind === "email" ? "email" : "off");
+          input.setAttribute("autocapitalize", kind === "password" || kind === "email" ? "off" : "sentences");
+          input.setAttribute("autocorrect", kind === "password" || kind === "email" ? "off" : "on");
+          input.setAttribute("aria-label", field.label || "Type here");
+          if (field.max > 0) input.maxLength = field.max; else input.removeAttribute("maxlength");
+          input.value = field.text || "";
+          label.textContent = field.label || "";
+          done.textContent = field.enter === "send" ? "Send" : "Done";
+          bar.style.display = "flex";
+          try { input.focus({ preventScroll: true }); } catch (e) { input.focus(); }
+          try { input.setSelectionRange(input.value.length, input.value.length); } catch (e) { /* email inputs refuse */ }
+          pin();
+          place();
+          sendToGame("OnBarOpened", String(field.id));
+        }
+
+        function close() {
+          open = null;
+          typingOpen = false;
+          if (bar) bar.style.display = "none";
+          if (input && document.activeElement === input) input.blur();
+          pin();
+          fitSoon();
+        }
+
+        function hide(tellGame) {
+          if (!open) return;
+          var field = open;
+          var text = input ? input.value : "";
+          close();
+          if (tellGame) sendToGame("OnBarClosed", field.id + "|" + text);
+        }
+
+        function submit() {
+          if (!open) return;
+          var field = open;
+          var text = input.value;
+          close();
+          sendToGame("OnBarSubmit", field.id + "|" + text);
+        }
+
+        // A tap on a game field opens the bar for it; a tap anywhere else in the game closes an open one.
+        document.addEventListener("pointerup", function (event) {
+          if (event.pointerType !== "touch") return;
+          if (bar && bar.contains(event.target)) return;
+          var rect = canvasEl.getBoundingClientRect();
+          if (rect.width <= 0 || rect.height <= 0) return;
+          var x = (event.clientX - rect.left) / rect.width, y = (event.clientY - rect.top) / rect.height;
+          for (var i = 0; i < fields.length; i++) {
+            var f = fields[i];
+            if (x >= f.x && x <= f.x + f.w && y >= f.y && y <= f.y + f.h) {
+              if (!open || open.id !== f.id) { if (open) hide(true); show(f); }
+              return;
+            }
+          }
+          if (open) hide(true);
+        }, true);
+
+        if (window.visualViewport) {
+          window.visualViewport.addEventListener("resize", function () { pin(); place(); });
+          window.visualViewport.addEventListener("scroll", function () { pin(); place(); });
+        }
+        window.addEventListener("scroll", function () { if (typingOpen) pin(); });
+
+        window.paraverseTypingBar = {
+          setFields: function (json) {
+            try { fields = (JSON.parse(json) || {}).fields || []; } catch (e) { fields = []; }
+            // The field went away under the bar (its screen closed): so does the bar.
+            if (open && !fields.some(function (f) { return f.id === open.id; })) hide(true);
+          },
+          setText: function (text) {
+            if (open && input && input.value !== text) input.value = text;
+          },
+          hide: function () { if (open) close(); },
+        };
+      })();
+
+      // (Throttling the frame rate of 100 Hz+ displays from here was tried and removed: wrapping requestAnimationFrame
+      // leaves Unity's loop drawing nothing. The resolution cap and the lighter renderer carry the performance.)
+
+      function startGame() {
+      var canvas = document.querySelector("#unity-canvas");
+      var loading = document.querySelector("#loading");
+
+      function showError(message) {
+        document.querySelector("#status").style.display = "none";
+        document.querySelector("#bar").style.display = "none";
+        var error = document.querySelector("#error");
+        error.textContent = message;
+        error.style.display = "block";
+      }
+
+      createUnityInstance(canvas, {
+        arguments: [],
+        dataUrl: "Build/4ae96210a6c1984b44988635cf8cf696.data.unityweb",
+        frameworkUrl: "Build/1750741b634cdbe17c907fe23403fbf9.framework.js.unityweb",
+        codeUrl: "Build/adbef0cd3471fc1b37109bc895c89571.wasm.unityweb",
+        streamingAssetsUrl: "sa-4ae96210a6c1",
+        // Build files are named by their content hash, so one kept in the browser's cache (Data Caching) is never
+        // out of date: a returning player loads it without asking the host at all. The same holds for map bundles
+        // (bundles/…_<hash>.bundle) and the versioned StreamingAssets folder (sa-<id>/, rewritten above by the
+        // build). Anything else is checked.
+        cacheControl: function (url) {
+          return /\/Build\/[0-9a-f]{32}\./.test(url) ||
+            /\/bundles\/.+_[0-9a-f]{32}\.bundle$/.test(url) ||
+            /\/sa-[0-9a-f]{12}\//.test(url) ? "immutable" : "must-revalidate";
+        },
+        companyName: "Paraverse Studio",
+        productName: "paraverse-multiplayer-game",
+        productVersion: "0.65.0",
+        // A 4K or Retina screen would otherwise render at 2–3x the pixels for little visible gain; capping at
+        // 1.5x is the single biggest GPU saving in the browser.
+        devicePixelRatio: fitPixelRatio(),
+        showBanner: function (message, type) {
+          if (type === "error") showError(message);
+        },
+      }, function (progress) {
+        document.querySelector("#fill").style.width = Math.round(progress * 100) + "%";
+        document.querySelector("#status").textContent = progress < 0.9 ? "Loading… " + Math.round(progress * 100) + "%" : "Starting…";
+      }).then(function (instance) {
+        unity = instance;
+        if (gameClosed) {
+          var gone = function () { canvas.remove(); };
+          instance.Quit().then(gone, gone);
+          return;
+        }
+        warnIfSoftwareRendering(canvas);
+        gameRunning = true;
+        // Tell the game when the tab is hidden or shown, so it can mute (and decide whether to keep running).
+        document.addEventListener("visibilitychange", function () {
+          try { instance.SendMessage("WebSessionBridge", "OnTabVisibility", document.hidden ? "hidden" : "visible"); } catch (e) { /* not ready */ }
+        });
+        // The window may have changed while loading (fullscreen, another monitor): catch up now (fitToWindow above).
+        fitSoon();
+        deliverToken();
+        loading.style.opacity = "0";
+        setTimeout(function () { loading.remove(); }, 450);
+        canvas.focus();
+      }).catch(function (message) {
+        showError(String(message));
+      });
+      }
+
+    </script>
+  </body>
+</html>
